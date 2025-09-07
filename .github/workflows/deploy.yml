@@ -28,7 +28,7 @@ jobs:
         NODE_OPTIONS: --max-old-space-size=4096
         
     - name: Deploy to Vercel (Production)
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && secrets.VERCEL_TOKEN != ''
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -37,7 +37,7 @@ jobs:
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
         
     - name: Deploy to Vercel (Preview)
-      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
+      if: (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master') && secrets.VERCEL_TOKEN != ''
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -45,8 +45,18 @@ jobs:
         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
         
+    - name: Skip Vercel Deployment (Missing Secrets)
+      if: secrets.VERCEL_TOKEN == ''
+      run: |
+        echo "⚠️ Vercel deployment skipped - missing required secrets"
+        echo "To enable Vercel deployment, configure the following repository secrets:"
+        echo "- VERCEL_TOKEN"
+        echo "- VERCEL_ORG_ID" 
+        echo "- VERCEL_PROJECT_ID"
+        echo "✅ Build completed successfully - ready for manual deployment"
+        
     - name: Comment PR with deployment URL
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && secrets.VERCEL_TOKEN != ''
       uses: actions/github-script@v7
       with:
         script: |
@@ -66,3 +76,20 @@ jobs:
               \n\nThis preview will be automatically updated when you push new commits to this PR.`
             });
           }
+          
+    - name: Comment PR with build status
+      if: github.event_name == 'pull_request' && secrets.VERCEL_TOKEN == ''
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `✅ **Build Completed Successfully!**
+            \n\n🏗️ The application has been built and is ready for deployment.
+            \n\n⚠️ **Note:** Vercel deployment was skipped due to missing secrets. To enable automatic deployment:
+            \n1. Configure \`VERCEL_TOKEN\`, \`VERCEL_ORG_ID\`, and \`VERCEL_PROJECT_ID\` in repository secrets
+            \n2. Or manually deploy the \`dist\` folder to your preferred hosting platform
+            \n\n📦 **Build artifacts are ready in the \`dist\` directory**`
+          });
