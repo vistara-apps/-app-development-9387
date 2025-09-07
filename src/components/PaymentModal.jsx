@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { X, Plus, Upload } from 'lucide-react';
 import { usePaymentContext } from '../hooks/usePaymentContext';
+import { useTransactions } from '../hooks/useTransactions';
 
-export default function PaymentModal({ isOpen, onClose, onPaymentCreated }) {
+export default function PaymentModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
     receiverAddress: '',
     amount: '',
@@ -12,34 +13,37 @@ export default function PaymentModal({ isOpen, onClose, onPaymentCreated }) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [error, setError] = useState(null);
   
   const { createSession } = usePaymentContext();
+  const { createTransaction } = useTransactions();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
     
     try {
+      // Validate form
+      if (!formData.receiverAddress || !formData.amount) {
+        throw new Error('Please fill in all required fields');
+      }
+
       // Create payment session
       await createSession(`$${formData.amount}`);
       setPaid(true);
       
-      // Create mock transaction
-      const newTransaction = {
-        transactionId: `0x${Math.random().toString(16).slice(2, 10)}`,
-        senderAddress: '0x1234...5678', // Would be actual wallet address
+      // Create transaction data
+      const transactionData = {
+        transactionId: `0x${Math.random().toString(16).slice(2, 18)}`,
         receiverAddress: formData.receiverAddress,
         amount: parseFloat(formData.amount),
         currency: formData.currency,
-        timestamp: new Date().toISOString(),
-        status: 'pending',
         notes: formData.notes,
-        fileStorageUrl: formData.file ? 'ipfs://...' : null,
-        type: 'sent',
-        sharedWith: []
       };
       
-      onPaymentCreated(newTransaction);
+      // Create transaction with file upload
+      await createTransaction(transactionData, formData.file);
       
       // Reset form
       setFormData({
@@ -49,11 +53,17 @@ export default function PaymentModal({ isOpen, onClose, onPaymentCreated }) {
         notes: '',
         file: null
       });
+      
+      // Close modal after a delay to show success
+      setTimeout(() => {
+        setPaid(false);
+        onClose();
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Payment failed:', err);
+      setError(err.message || 'Failed to create payment');
       setPaid(false);
-      onClose();
-    } catch (error) {
-      console.error('Payment failed:', error);
-      alert('Payment failed: ' + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -78,6 +88,12 @@ export default function PaymentModal({ isOpen, onClose, onPaymentCreated }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 rounded-lg p-3 mb-4">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

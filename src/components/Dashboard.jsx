@@ -1,90 +1,29 @@
-import { useState, useEffect } from 'react';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import TransactionCard from './TransactionCard';
 import PaymentModal from './PaymentModal';
 import ShareModal from './ShareModal';
 import TransactionDetailsModal from './TransactionDetailsModal';
-
-// Mock data for demonstration
-const mockTransactions = [
-  {
-    transactionId: '0xa1b2c3d4e5f67890',
-    senderAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    receiverAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-    amount: 150.00,
-    currency: 'USDC',
-    timestamp: '2024-01-15T10:30:00Z',
-    status: 'completed',
-    notes: 'Payment for design work - Logo and branding materials',
-    fileStorageUrl: 'ipfs://QmX4k2...',
-    type: 'received',
-    sharedWith: ['0x9876543210fedcba9876543210fedcba98765432']
-  },
-  {
-    transactionId: '0xb2c3d4e5f6789012',
-    senderAddress: '0x9876543210fedcba9876543210fedcba98765432',
-    receiverAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    amount: 75.50,
-    currency: 'USDC',
-    timestamp: '2024-01-14T15:45:00Z',
-    status: 'completed',
-    notes: 'Coffee shop payment - Meeting with client',
-    fileStorageUrl: null,
-    type: 'sent',
-    sharedWith: []
-  },
-  {
-    transactionId: '0xc3d4e5f678901234',
-    senderAddress: '0x1234567890abcdef1234567890abcdef12345678',
-    receiverAddress: '0xfedcba0987654321fedcba0987654321fedcba09',
-    amount: 200.00,
-    currency: 'ETH',
-    timestamp: '2024-01-13T09:20:00Z',
-    status: 'pending',
-    notes: 'Monthly subscription payment',
-    fileStorageUrl: null,
-    type: 'sent',
-    sharedWith: []
-  }
-];
+import { useTransactions } from '../hooks/useTransactions';
 
 export default function Dashboard() {
-  const [transactions, setTransactions] = useState(mockTransactions);
+  const {
+    transactions,
+    loading,
+    error,
+    user,
+    stats,
+    updateTransaction,
+    shareTransaction,
+    refreshTransactions,
+    clearError
+  } = useTransactions();
+
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
-  const [stats, setStats] = useState({
-    totalReceived: 0,
-    totalSent: 0,
-    pendingCount: 0,
-    completedCount: 0
-  });
-
-  useEffect(() => {
-    // Calculate stats
-    const received = transactions
-      .filter(t => t.type === 'received' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const sent = transactions
-      .filter(t => t.type === 'sent' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const pending = transactions.filter(t => t.status === 'pending').length;
-    const completed = transactions.filter(t => t.status === 'completed').length;
-
-    setStats({
-      totalReceived: received,
-      totalSent: sent,
-      pendingCount: pending,
-      completedCount: completed
-    });
-  }, [transactions]);
-
-  const handlePaymentCreated = (newTransaction) => {
-    setTransactions([newTransaction, ...transactions]);
-  };
+  const [filter, setFilter] = useState('all');
 
   const handleShare = (transaction) => {
     setSelectedTransaction(transaction);
@@ -96,28 +35,89 @@ export default function Dashboard() {
     setIsDetailsModalOpen(true);
   };
 
-  const handleUpdateTransaction = (updatedTransaction) => {
-    setTransactions(transactions.map(t => 
-      t.transactionId === updatedTransaction.transactionId ? updatedTransaction : t
-    ));
+  const handleUpdateTransaction = async (transactionId, updates) => {
+    try {
+      await updateTransaction(transactionId, updates);
+    } catch (err) {
+      console.error('Failed to update transaction:', err);
+    }
   };
+
+  const handleShareTransaction = async (transactionId, sharedWithAddresses) => {
+    try {
+      await shareTransaction(transactionId, sharedWithAddresses);
+    } catch (err) {
+      console.error('Failed to share transaction:', err);
+    }
+  };
+
+  // Filter transactions based on selected filter
+  const filteredTransactions = transactions.filter(transaction => {
+    switch (filter) {
+      case 'received':
+        return transaction.type === 'received';
+      case 'sent':
+        return transaction.type === 'sent';
+      case 'pending':
+        return transaction.status === 'pending';
+      default:
+        return true;
+    }
+  });
 
   return (
     <div className="space-y-8">
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <div>
+              <p className="text-red-400 font-medium">Error</p>
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={clearError}
+            className="text-red-400 hover:text-red-300 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Payment Dashboard</h1>
-          <p className="text-gray-300">Track your payments and share context seamlessly</p>
+          <p className="text-gray-300">
+            Track your payments and share context seamlessly
+            {user && (
+              <span className="block text-sm text-gray-400 mt-1">
+                Welcome back, {user.display_name}
+              </span>
+            )}
+          </p>
         </div>
         
-        <button
-          onClick={() => setIsPaymentModalOpen(true)}
-          className="btn-primary flex items-center space-x-2 w-full sm:w-auto justify-center"
-        >
-          <Plus className="w-5 h-5" />
-          <span>New Payment</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={refreshTransactions}
+            disabled={loading}
+            className="btn-secondary flex items-center space-x-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          
+          <button
+            onClick={() => setIsPaymentModalOpen(true)}
+            className="btn-primary flex items-center space-x-2 w-full sm:w-auto justify-center"
+          >
+            <Plus className="w-5 h-5" />
+            <span>New Payment</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -176,7 +176,11 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-white">Recent Transactions</h2>
           <div className="flex items-center space-x-2">
-            <select className="bg-dark-surface text-dark-text px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
+            <select 
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="bg-dark-surface text-dark-text px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+            >
               <option value="all">All Transactions</option>
               <option value="received">Received</option>
               <option value="sent">Sent</option>
@@ -185,46 +189,75 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {transactions.length > 0 ? (
-            transactions.map((transaction) => (
-              <TransactionCard
-                key={transaction.transactionId}
-                transaction={transaction}
-                onShare={handleShare}
-                onViewDetails={handleViewDetails}
-              />
-            ))
-          ) : (
-            <div className="card text-center py-12">
-              <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-dark-text mb-2">No transactions yet</h3>
-              <p className="text-dark-text-secondary mb-6">
-                Get started by creating your first payment
-              </p>
-              <button
-                onClick={() => setIsPaymentModalOpen(true)}
-                className="btn-primary"
-              >
-                Create Payment
-              </button>
-            </div>
-          )}
-        </div>
+        {loading && transactions.length === 0 ? (
+          <div className="card text-center py-12">
+            <RefreshCw className="w-16 h-16 text-gray-400 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-semibold text-dark-text mb-2">Loading transactions...</h3>
+            <p className="text-dark-text-secondary">
+              Please wait while we fetch your payment history
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredTransactions.length > 0 ? (
+              filteredTransactions.map((transaction) => (
+                <TransactionCard
+                  key={transaction.transactionId}
+                  transaction={transaction}
+                  onShare={handleShare}
+                  onViewDetails={handleViewDetails}
+                />
+              ))
+            ) : transactions.length > 0 ? (
+              <div className="card text-center py-12">
+                <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-dark-text mb-2">No {filter} transactions</h3>
+                <p className="text-dark-text-secondary mb-6">
+                  Try changing the filter or create a new payment
+                </p>
+                <button
+                  onClick={() => setFilter('all')}
+                  className="btn-secondary mr-3"
+                >
+                  Show All
+                </button>
+                <button
+                  onClick={() => setIsPaymentModalOpen(true)}
+                  className="btn-primary"
+                >
+                  Create Payment
+                </button>
+              </div>
+            ) : (
+              <div className="card text-center py-12">
+                <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-dark-text mb-2">No transactions yet</h3>
+                <p className="text-dark-text-secondary mb-6">
+                  Get started by creating your first payment
+                </p>
+                <button
+                  onClick={() => setIsPaymentModalOpen(true)}
+                  className="btn-primary"
+                >
+                  Create Payment
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Modals */}
       <PaymentModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
-        onPaymentCreated={handlePaymentCreated}
       />
       
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         transaction={selectedTransaction}
-        onUpdate={handleUpdateTransaction}
+        onShare={handleShareTransaction}
       />
       
       <TransactionDetailsModal

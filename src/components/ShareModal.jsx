@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Plus, UserPlus, Copy } from 'lucide-react';
 
-export default function ShareModal({ isOpen, onClose, transaction, onUpdate }) {
+export default function ShareModal({ isOpen, onClose, transaction, onShare }) {
   const [sharedAddresses, setSharedAddresses] = useState(
     transaction?.sharedWith || []
   );
@@ -19,15 +19,16 @@ export default function ShareModal({ isOpen, onClose, transaction, onUpdate }) {
     setSharedAddresses(sharedAddresses.filter(addr => addr !== address));
   };
 
-  const handleShare = () => {
-    if (transaction) {
-      const updatedTransaction = {
-        ...transaction,
-        sharedWith: sharedAddresses
-      };
-      onUpdate(updatedTransaction);
+  const handleShare = async () => {
+    if (transaction && onShare) {
+      try {
+        await onShare(transaction.transactionId, sharedAddresses);
+        onClose();
+      } catch (error) {
+        console.error('Failed to share transaction:', error);
+        // You could add error state here if needed
+      }
     }
-    onClose();
   };
 
   const copyShareLink = () => {
